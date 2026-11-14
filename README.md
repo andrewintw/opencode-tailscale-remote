@@ -79,10 +79,15 @@ OPENCODE_SERVER_PASSWORD="設定你的安全密碼"
 [DEBUG] Executing: cd /home/user/projects/project-a && nohup env OPENCODE_SERVER_PASSWORD=*** opencode serve --hostname 100.x.y.z --port 4096
 [INFO] OpenCode server started in background (/home/user/projects/project-a)
 [INFO] Listening on: 100.x.y.z:4096
-[INFO] Remote attach command (password from /home/user/.oc-tailnet.env):
+[INFO] Remote attach command:
 
   opencode attach http://100.x.y.z:4096
+
+  Auth: provide OPENCODE_SERVER_PASSWORD or use -p <password>.
+  (same host, password from /home/user/.oc-tailnet.env) set -a; . "/home/user/.oc-tailnet.env"; set +a
 ```
+
+> 最後一行只在密碼確實來自 `~/.oc-tailnet.env` 時出現；密碼不會被印出。
 
 查看狀態與關閉服務：
 
@@ -99,7 +104,9 @@ OPENCODE_SERVER_PASSWORD="設定你的安全密碼"
 
 ## 從其他裝置連線
 
-確保連線端裝置已加入同一個 Tailscale 網路，然後在終端機輸入密碼並接入：
+`opencode attach` 需要 Basic Auth 認證，預設使用者名稱是 `opencode`。伺服器密碼不會自動同步到連線端，請在連線端用下列任一方式提供；否則會得到 `401 Unauthorized`。
+
+### 任一裝置：環境變數（建議）
 
 ```bash
 # 避免密碼留在 shell history
@@ -107,7 +114,24 @@ read -rsp 'OpenCode password: ' OPENCODE_SERVER_PASSWORD && export OPENCODE_SERV
 opencode attach http://100.x.y.z:4096
 ```
 
-OpenCode 預設使用者名稱是 `opencode`；若你有自訂，可加上 `-u <username>`。
+### 任一裝置：命令列參數
+
+```bash
+opencode attach -p '<password>' http://100.x.y.z:4096
+```
+
+> `-p` 會出現在 process list 與 shell history，建議只在必要時使用。
+
+### 同一台主機且密碼來自 `~/.oc-tailnet.env`
+
+```bash
+set -a; . ~/.oc-tailnet.env; set +a
+opencode attach http://100.x.y.z:4096
+```
+
+> 只有當伺服器密碼確實來自該檔案時，source 才有用。若伺服器是用 `HARDCODED_PASSWORD` 或 shell 環境變數啟動，請改用前兩種方式，且不要假設其他裝置上有這個檔案。
+
+若使用者名稱不是預設值，加上 `-u <username>`。
 
 ## 安全性
 
@@ -165,6 +189,10 @@ ip -4 addr show        # 應該看到 tailscale0 持有 100.x.y.z
 **密碼明明正確卻驗證失敗**
 - 檢查 `~/.oc-tailnet.env` 是否含 Windows CRLF：`file ~/.oc-tailnet.env` 或 `sed -n l ~/.oc-tailnet.env`。
 - 確認沒有同時設定多個來源（shell 環境變數優先於檔案）。
+
+**`opencode attach` 回傳 `401 Unauthorized`**
+- 連線端沒有帶密碼：設定 `OPENCODE_SERVER_PASSWORD`、使用 `-p <password>`，或（同一台主機）source `~/.oc-tailnet.env`。
+- 已提供密碼仍失敗時，確認使用者名稱（預設 `opencode`，可用 `-u` 覆寫）與密碼來源是否正確。
 
 **Port 被佔用**
 - `ss -ltnp "sport = :4096"` 找出佔用者，改用其他 Port 或先停止該服務。

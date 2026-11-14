@@ -105,34 +105,61 @@ check_opencode_installed() {
 # Helper Functions
 # ==========================================
 
+# Load ENV_FILE into the current shell without overriding variables that were
+# already exported by the caller. Sourcing here (instead of inside a subshell)
+# keeps settings such as OPENCODE_BIND_HOST available to cmd_start.
+load_env_file() {
+	[ -f "$ENV_FILE" ] || return 0
+
+	local perms=""
+	perms=$(stat -c '%a' "$ENV_FILE" 2>/dev/null || true)
+	if [ -n "$perms" ] && (( 8#$perms & 077 )); then
+		print_warn "ENV file $ENV_FILE is accessible by group/others (mode $perms). Run: chmod 600 $ENV_FILE"
+	fi
+
+	local prev_pw="${OPENCODE_SERVER_PASSWORD:-}"
+	local prev_host="${OPENCODE_BIND_HOST:-}"
+
+	set -a
+	# shellcheck disable=SC1090
+	source "$ENV_FILE"
+	set +a
+
+	# Shell environment takes precedence over the config file.
+	if [ -n "$prev_pw" ]; then
+		OPENCODE_SERVER_PASSWORD="$prev_pw"
+	fi
+	if [ -n "$prev_host" ]; then
+		OPENCODE_BIND_HOST="$prev_host"
+	fi
+}
+
 # Resolve server password with priority:
 # 1. HARDCODED_PASSWORD in script
 # 2. Current shell environment variable OPENCODE_SERVER_PASSWORD
 # 3. Sourced from ENV_FILE (~/.oc-tailnet.env)
 # 4. Abort if still empty
+# Sets RESOLVED_PASSWORD and PASSWORD_SOURCE for the caller.
 resolve_password() {
-	local resolved_pw=""
+	local shell_pw="${OPENCODE_SERVER_PASSWORD:-}"
+
+	load_env_file
+
+	RESOLVED_PASSWORD=""
+	PASSWORD_SOURCE=""
 
 	if [ -n "$HARDCODED_PASSWORD" ]; then
-		resolved_pw="$HARDCODED_PASSWORD"
+		RESOLVED_PASSWORD="$HARDCODED_PASSWORD"
+		PASSWORD_SOURCE="hardcoded"
+	elif [ -n "$shell_pw" ]; then
+		RESOLVED_PASSWORD="$shell_pw"
+		PASSWORD_SOURCE="shell_env"
 	elif [ -n "${OPENCODE_SERVER_PASSWORD:-}" ]; then
-		resolved_pw="$OPENCODE_SERVER_PASSWORD"
-	elif [ -f "$ENV_FILE" ]; then
-		local perms=""
-		perms=$(stat -c '%a' "$ENV_FILE" 2>/dev/null || true)
-		if [ -n "$perms" ] && (( 8#$perms & 077 )); then
-			print_warn "ENV file $ENV_FILE is accessible by group/others (mode $perms). Run: chmod 600 $ENV_FILE"
-		fi
-
-		# Load variables from dotenv file
-		set -a
-		# shellcheck disable=SC1090
-		source "$ENV_FILE"
-		set +a
-		resolved_pw="${OPENCODE_SERVER_PASSWORD:-}"
+		RESOLVED_PASSWORD="$OPENCODE_SERVER_PASSWORD"
+		PASSWORD_SOURCE="env_file"
 	fi
 
-	if [ -z "$resolved_pw" ]; then
+	if [ -z "$RESOLVED_PASSWORD" ]; then
 		print_error "OPENCODE_SERVER_PASSWORD is not set. Refusing to start without a password."
 		echo "" >&2
 		echo "Please configure a password using one of the following methods (in priority order):" >&2
@@ -149,7 +176,7 @@ resolve_password() {
 		return 1
 	fi
 
-	echo "$resolved_pw"
+	return 0
 }
 
 # Validate that a port is an integer within 1-65535
@@ -436,8 +463,8 @@ cmd_start() {
 	fi
 
 	# Resolve password strictly before starting
-	local password
-	password=$(resolve_password) || exit 1
+	resolve_password || exit 1
+	local password="$RESOLVED_PASSWORD"
 
 	local ts_ip
 	ts_ip=$(get_tailscale_ip) || exit 1
@@ -507,9 +534,14 @@ cmd_start() {
 
 	print_info "OpenCode server started in background ($dir)"
 	print_info "Listening on: $bind_host:$port"
-	print_info "Remote attach command (password from $ENV_FILE):"
+	print_info "Remote attach command:"
 	echo ""
 	echo "  opencode attach http://$ts_ip:$port"
+	echo ""
+	echo "  Auth: provide OPENCODE_SERVER_PASSWORD or use -p <password>."
+	if [ "$PASSWORD_SOURCE" = "env_file" ]; then
+		echo "  (same host, password from $ENV_FILE) set -a; . \"$ENV_FILE\"; set +a"
+	fi
 	echo ""
 }
 
