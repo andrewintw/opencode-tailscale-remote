@@ -76,6 +76,7 @@ OPENCODE_SERVER_PASSWORD="設定你的安全密碼"
 啟動後會印出監聽位址與遠端連線方式（不會印出密碼）：
 
 ```
+[DEBUG] Executing: cd /home/user/projects/project-a && nohup env OPENCODE_SERVER_PASSWORD=*** opencode serve --hostname 100.x.y.z --port 4096
 [INFO] OpenCode server started in background (/home/user/projects/project-a)
 [INFO] Listening on: 100.x.y.z:4096
 [INFO] Remote attach command (password from /home/user/.oc-tailnet.env):

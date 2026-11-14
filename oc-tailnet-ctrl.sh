@@ -17,6 +17,7 @@ RUNTIME_DIR=""
 COLOR_RED='\033[0;31m'
 COLOR_YELLOW='\033[0;33m'
 COLOR_GREEN='\033[0;32m'
+COLOR_CYAN='\033[0;96m'
 COLOR_RESET='\033[0m'
 
 # ==========================================
@@ -33,6 +34,10 @@ print_warn() {
 
 print_error() {
 	printf "${COLOR_RED}[ERROR] %s${COLOR_RESET}\n" "$1" >&2
+}
+
+print_debug() {
+	printf "${COLOR_CYAN}[DEBUG] %s${COLOR_RESET}\n" "$1" >&2
 }
 
 # ==========================================
@@ -452,6 +457,11 @@ cmd_start() {
 	elif [ "$bind_host" = "0.0.0.0" ]; then
 		print_warn "Binding to 0.0.0.0 exposes the server on all interfaces. Ensure firewall/Tailscale ACL protection."
 	fi
+
+	local cmd_preview
+	cmd_preview=$(printf 'cd %q && nohup env OPENCODE_SERVER_PASSWORD=*** opencode serve --hostname %q --port %q' \
+		"$dir" "$bind_host" "$port")
+	print_debug "Executing: $cmd_preview"
 
 	local log
 	log="$(log_file "$port")"
