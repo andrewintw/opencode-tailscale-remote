@@ -1,5 +1,7 @@
 # opencode-tailscale-remote
 
+![AI-Assisted](https://img.shields.io/badge/Code-AI--Assisted-blueviolet)
+
 這是一個用來管理多專案 OpenCode 背景服務的 Shell 腳本（`oc-tailnet-ctrl.sh`），讓你可以透過 Tailscale 私人網路從遠端電腦直接接入正在進行中的工作階段。
 
 ## 為什麼需要這個工具？
